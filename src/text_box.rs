@@ -598,24 +598,42 @@ where
                 });
 
                 // Calculate scrollbar
-                editor.with_buffer(|buffer| {
-                    let mut start_line_opt = None;
-                    let mut end_line = 0;
+                editor.with_buffer_mut(|buffer| {
+
                     let mut max_line_width = 0.0;
                     for run in buffer.layout_runs() {
-                        end_line = run.line_i;
-                        if start_line_opt.is_none() {
-                            start_line_opt = Some(end_line);
-                        }
                         if run.line_w > max_line_width {
                             max_line_width = run.line_w;
                         }
                     }
 
-                    let start_line = start_line_opt.unwrap_or(end_line);
-                    let lines = buffer.lines.len();
+                    let mut lines = 0; // Count of lines including word wrapped lines
+
+                    for line in &buffer.lines {
+                        lines += if let Some(line_layout) = line.layout_opt() {
+                            line_layout.len()
+                        } else {
+                            1
+                        };
+                    }
+                    
+                    let line_height = buffer.metrics().line_height;
+
+                    // Limit scroll when lines wrap. Before wrapped lines weren't considered,
+                    // Below calculates where the max scroll vertical value should be, then replaces it if it is greater than the expected value.
+                    if buffer.scroll().vertical > (lines as f32 * line_height)-image_h as f32 {
+                        let mut scroll = buffer.scroll().clone();
+                        scroll.vertical = (lines as f32 * line_height)-image_h as f32;
+                        buffer.set_scroll(scroll);
+                    }
+
+                    let mut end_line = (buffer.scroll().vertical as f32/line_height) as usize + (image_h as f32 /line_height) as usize;
+
+                    let start_line = (buffer.scroll().vertical as f32/line_height) as usize;
                     let start_y = (start_line * image_h as usize) / lines;
                     let end_y = ((end_line + 1) * image_h as usize) / lines;
+                    println!("{start_line}, {image_h}, {end_line}, {lines}");
+                    println!("{}, {}, {}", end_y, start_y, end_y-start_y);
 
                     let rect = Rectangle::new(
                         [image_w as f32 / scale_factor, start_y as f32 / scale_factor].into(),
